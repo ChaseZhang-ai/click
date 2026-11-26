@@ -3401,14 +3401,51 @@ class Option(Parameter):
             value = value()
         return value
 
+    def _get_envvar_names(self, ctx: Context | None) -> tuple[str, ...]:
+        """The environment variable names shown in help and error messages.
+
+        Like :meth:`resolve_envvar_value`, this falls back on
+        :attr:`Context.auto_envvar_prefix` to build the name that is read for
+        this option.
+
+        :meta private:
+        """
+        envvar = self.envvar
+
+        if not envvar and (
+            ctx is not None
+            and self.allow_from_autoenv
+            and ctx.auto_envvar_prefix is not None
+            and self.name
+        ):
+            envvar = f"{ctx.auto_envvar_prefix}_{self.name.upper()}"
+
+        if not envvar:
+            return ()
+
+        if isinstance(envvar, str):
+            return (envvar,)
+
+        return tuple(str(var) for var in envvar)
+
     def get_error_hint(self, ctx: Context | None) -> str:
+        """Get a stringified version of the param for use in error messages.
+
+        .. versionchanged:: 8.6.0
+            The environment variable name derived from
+            :attr:`Context.auto_envvar_prefix` is named like on the help page.
+        """
         result = super().get_error_hint(ctx)
-        if self.show_envvar and self.envvar:
-            envvars = [self.envvar] if isinstance(self.envvar, str) else self.envvar
-            # An environment variable is allowed to feature a space or a comma on all
-            # platforms, hence the quotes around each.
-            var_str = ", ".join(f"'{var}'" for var in envvars)
-            result += f" (env var: {var_str})"
+
+        if self.show_envvar:
+            envvars = self._get_envvar_names(ctx)
+
+            if envvars:
+                # An environment variable is allowed to feature a space or a
+                # comma on all platforms, hence the quotes around each.
+                var_str = ", ".join(f"'{var}'" for var in envvars)
+                result += f" (env var: {var_str})"
+
         return result
 
     def _check_name_is_normalized(self, name: str, decls: cabc.Sequence[str]) -> None:
@@ -3600,20 +3637,10 @@ class Option(Parameter):
         extra: types.OptionHelpExtra = {}
 
         if self.show_envvar:
-            envvar = self.envvar
+            envvars = self._get_envvar_names(ctx)
 
-            if not envvar and (
-                self.allow_from_autoenv
-                and ctx.auto_envvar_prefix is not None
-                and self.name
-            ):
-                envvar = f"{ctx.auto_envvar_prefix}_{self.name.upper()}"
-
-            if envvar:
-                if isinstance(envvar, str):
-                    extra["envvars"] = (envvar,)
-                else:
-                    extra["envvars"] = tuple(str(d) for d in envvar)
+            if envvars:
+                extra["envvars"] = envvars
 
         # Temporarily enable resilient parsing to avoid type casting
         # failing for the default. Might be possible to extend this to

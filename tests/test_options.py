@@ -1199,6 +1199,41 @@ def test_missing_envvar_sequence(runner, envvar, expected):
     assert f"Error: Missing option {expected}." in result.output
 
 
+def test_missing_envvar_auto_prefix(runner):
+    """The error hint names the environment variable derived from the prefix."""
+    option = click.Option(["--foo"], show_envvar=True, required=True)
+    cli = click.Command("cli", params=[option])
+    result = runner.invoke(cli, auto_envvar_prefix="TEST")
+    assert result.exit_code == 2
+    assert "Error: Missing option '--foo' (env var: 'TEST_FOO')." in result.output
+
+
+def test_missing_envvar_explicit_over_auto_prefix(runner):
+    """An explicit ``envvar`` wins over the name derived from the prefix."""
+    option = click.Option(["--foo"], envvar="BAR", show_envvar=True, required=True)
+    cli = click.Command("cli", params=[option])
+    result = runner.invoke(cli, auto_envvar_prefix="TEST")
+    assert result.exit_code == 2
+    assert "Error: Missing option '--foo' (env var: 'BAR')." in result.output
+
+
+def test_missing_envvar_auto_prefix_not_allowed(runner):
+    """An option that ignores the prefix does not name a derived variable."""
+    option = click.Option(
+        ["--foo"], show_envvar=True, required=True, allow_from_autoenv=False
+    )
+    cli = click.Command("cli", params=[option])
+    result = runner.invoke(cli, auto_envvar_prefix="TEST")
+    assert result.exit_code == 2
+    assert "Error: Missing option '--foo'." in result.output
+
+
+def test_missing_envvar_without_context():
+    """An error hint without a context cannot derive an environment variable."""
+    option = click.Option(["--foo"], show_envvar=True, required=True)
+    assert option.get_error_hint(None) == "'--foo'"
+
+
 def test_case_insensitive_choice(runner):
     @click.command()
     @click.option("--foo", type=click.Choice(["Orange", "Apple"], case_sensitive=False))
